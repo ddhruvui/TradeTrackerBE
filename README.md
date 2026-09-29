@@ -36,6 +36,17 @@ npm run dev            # API on http://localhost:4000
 
 Saving `.env` while `npm run dev` runs restarts the API with the new values. A shell variable wins over `.env` (`TEST_DB=true npm start`).
 
+## Deploy on Vercel
+
+Vercel runs `index.js` at the repo root as a single function: it exports the Express app instead of listening on a port (locally, `server/index.js` does the listening). In the Vercel project:
+
+1. **Environment variables** (Settings → Environment Variables): `MONGO_URI`, `DB_PASSWORD`, `MONGO_DB`, `MONGO_DB_Test`, `TEST_DB`, `BROKERS`, `DEFAULT_BROKER`, with the same values as your `.env`. Redeploy after changing them.
+2. **MongoDB Atlas network access**: Vercel Functions don't have fixed IP addresses, so Atlas has to accept connections from anywhere (Network Access → Add IP Address → 0.0.0.0/0), or use Vercel's MongoDB Atlas integration.
+
+If the database can't be reached, requests get a 503 with a short message, and the reason is written to the function logs.
+
+The API has no login: anyone who knows its URL can read, change and delete trades.
+
 ## How the numbers work
 
 - **Entries** are a Buy or a Short at a broker, with a term (Short by default, Mid or Long) and a margin in dollars ($0 by default).
@@ -51,6 +62,7 @@ The rules live in `server/lib/trades.js`. The frontend's live exit preview (`src
 
 | Method | Path | Body or query |
 | --- | --- | --- |
+| GET | `/` | Returns the API's name and routes |
 | GET | `/api/info` | Returns `{ testDb, brokers, defaultBroker }` |
 | GET | `/api/trades` | `?term=all\|short\|mid\|long`. Sorted; closed trades include `realizedPnl`, `returnPct` and `daysHeld`. |
 | GET | `/api/summary` | `?term=…&today=YYYY-MM-DD` (the viewer's date). Returns `week`, `month`, `year` and `overall`, each with `pnl`, `margin`, `count` and `from`; `week.to`; `openCount`; `firstDate`. |
@@ -64,8 +76,9 @@ Dates are `YYYY-MM-DD` strings. Errors come back as `{ error, fields? }`.
 ## Layout
 
 ```
+index.js          Vercel entry: exports the app, connects on first request
 server/
-  index.js        startup: config checks, listen, connect
+  index.js        local startup: config checks, listen, connect
   app.js          Express app and routes
   lib/trades.js   profit, period, sorting and exit rules
   models/         Mongoose Trade model

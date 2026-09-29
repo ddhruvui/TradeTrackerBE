@@ -15,7 +15,7 @@ export function resolveDatabase(env = process.env) {
   const isTest = usesTestDb(env);
   const key = isTest ? 'MONGO_DB_Test' : 'MONGO_DB';
   const name = env[key]?.trim();
-  if (!name) throw new Error(`${key} is not set. Add it to .env.`);
+  if (!name) throw new Error(`${key} is not set. Add it to .env or the host's environment variables.`);
   if (isTest && name === env.MONGO_DB?.trim()) {
     throw new Error('MONGO_DB_Test must name a different database than MONGO_DB.');
   }
@@ -25,10 +25,10 @@ export function resolveDatabase(env = process.env) {
 // Atlas connection strings carry a <db_password> placeholder; fill it from DB_PASSWORD.
 export function resolveUri(env = process.env) {
   const uri = env.MONGO_URI?.trim();
-  if (!uri) throw new Error('MONGO_URI is not set. Add it to .env.');
+  if (!uri) throw new Error("MONGO_URI is not set. Add it to .env or the host's environment variables.");
   if (!PASSWORD_PLACEHOLDER.test(uri)) return uri;
   if (!env.DB_PASSWORD) {
-    throw new Error('MONGO_URI contains <db_password> but DB_PASSWORD is not set in .env.');
+    throw new Error('MONGO_URI contains <db_password> but DB_PASSWORD is not set.');
   }
   const password = encodeURIComponent(env.DB_PASSWORD);
   return uri.replace(PASSWORD_PLACEHOLDER, () => password);

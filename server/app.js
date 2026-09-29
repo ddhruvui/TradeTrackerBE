@@ -23,6 +23,12 @@ export function createApp({ brokers = loadBrokers() } = {}) {
   app.use('/api/summary', summaryRouter);
   app.use('/api', (req, res) => res.status(404).json({ error: 'Unknown API route.' }));
 
+  // Opening the bare URL (for example the Vercel domain) shows what's here.
+  app.get('/', (req, res) =>
+    res.json({ name: 'Trade Tracker API', routes: ['/api/info', '/api/trades', '/api/summary'] }),
+  );
+  app.use((req, res) => res.status(404).json({ error: 'Not found. The API lives under /api.' }));
+
   app.use(errorHandler);
   return app;
 }

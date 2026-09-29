@@ -5,13 +5,16 @@ const FALLBACK = { R: 'Robinhood', V: 'Vanguard', ML: 'Merrill Lynch' };
 const CODE = /^[A-Z0-9]{1,6}$/;
 
 export function loadBrokers(env = process.env) {
+  // .env strips the single quotes around the JSON; a hosting dashboard such as
+  // Vercel's may keep them if they were pasted along with the value.
+  const raw = env.BROKERS?.trim().replace(/^'([\s\S]*)'$/, '$1');
   let config = FALLBACK;
-  if (env.BROKERS?.trim()) {
+  if (raw) {
     try {
-      config = JSON.parse(env.BROKERS);
+      config = JSON.parse(raw);
     } catch {
       throw new Error(
-        `BROKERS in .env must be a JSON object in single quotes, like BROKERS='{"R":"Robinhood"}'.`,
+        `BROKERS must be a JSON object, like {"R":"Robinhood"}. In .env, wrap it in single quotes.`,
       );
     }
   }

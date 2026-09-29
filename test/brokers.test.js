@@ -21,8 +21,12 @@ test('falls back to R, V and ML with R as default when BROKERS is missing', () =
   assert.equal(brokers.defaultBroker, 'R');
 });
 
+test('accepts the value with its single quotes, as pasted into a hosting dashboard', () => {
+  assert.deepEqual(loadBrokers({ BROKERS: `'${JSON_CONFIG}'` }).codes, ['R', 'V', 'ML']);
+});
+
 test('explains a broken config instead of starting with it', () => {
-  assert.throws(() => loadBrokers({ BROKERS: '{R:Robinhood}' }), /must be a JSON object in single quotes/);
+  assert.throws(() => loadBrokers({ BROKERS: '{R:Robinhood}' }), /must be a JSON object/);
   assert.throws(() => loadBrokers({ BROKERS: '{}' }), /at least one broker/);
   assert.throws(() => loadBrokers({ BROKERS: '["R"]' }), /at least one broker/);
   assert.throws(() => loadBrokers({ BROKERS: '{"R S":"Robinhood"}' }), /1–6 letters or digits/);
