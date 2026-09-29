@@ -1,0 +1,8 @@
+# Secrets: the real .env never goes in git. Only the placeholder example does.
+.env
+.env.*
+!.env.example
+
+node_modules/
+*.log
+.DS_Store
