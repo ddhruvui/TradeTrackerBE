@@ -1,6 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  calculatedPnlCents,
   exitPnlCents,
   exitProblem,
   filterByTerm,
@@ -80,6 +81,24 @@ describe('margin', () => {
     );
     assert.deepEqual([summary.week.pnl, summary.week.margin], [85, 15]);
     assert.deepEqual([summary.month.pnl, summary.month.margin], [-20, 20]);
+  });
+});
+
+describe('edited profit or loss', () => {
+  test('replaces the calculated amount on a closed trade, which stays as it was', () => {
+    const edited = closedOn('2026-09-25', 110, { margin: 5, pnlOverride: 93.21 });
+    assert.equal(calculatedPnlCents(edited), 9500); // $100 price move − $5 margin
+    assert.equal(realizedPnl(edited), 93.21);
+    near(returnPct(edited), 9.321);
+  });
+
+  test('an open trade has realized nothing, edited or not', () => {
+    assert.equal(realizedPnl(trade({ pnlOverride: 50 })), 0);
+  });
+
+  test('period totals use the edited amount', () => {
+    const summary = summarize([closedOn('2026-09-25', 110, { pnlOverride: -12.5 })], '2026-09-28');
+    assert.equal(summary.week.pnl, -12.5);
   });
 });
 

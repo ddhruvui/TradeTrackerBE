@@ -18,6 +18,7 @@ const FIELD_LABELS = {
   exitDate: 'Exit date',
   margin: 'Margin',
   broker: 'Broker',
+  pnlOverride: 'Realized P&L',
 };
 
 function describe(err) {

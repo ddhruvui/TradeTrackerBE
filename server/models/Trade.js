@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import {
   SIDES,
   TERMS,
+  calculatedPnlCents,
   daysBetween,
   isISODate,
   realizedPnl,
@@ -53,6 +54,16 @@ const tradeSchema = new mongoose.Schema(
     margin: { type: Number, default: 0, validate: zeroOrMore('Margin') },
     // Short code of the broker holding the trade, one of BROKERS in .env (checked by the routes).
     broker: { type: String, trim: true, uppercase: true, maxlength: 6 },
+    // Final realized profit or loss typed in for a closed trade. It replaces the
+    // calculated amount; null means use the calculation.
+    pnlOverride: {
+      type: Number,
+      default: null,
+      validate: {
+        validator: (value) => value == null || Number.isFinite(value),
+        message: 'Realized P&L must be a number.',
+      },
+    },
     // Set on the closed part of a partial exit; points at the position it came from.
     splitFrom: { type: mongoose.Schema.Types.ObjectId, default: null },
   },
@@ -60,6 +71,9 @@ const tradeSchema = new mongoose.Schema(
 );
 
 tradeSchema.pre('validate', function () {
+  // A reopened trade has realized nothing, so an edited amount no longer applies.
+  if (this.exitPrice == null && this.exitDate == null) this.pnlOverride = null;
+
   const hasPrice = this.exitPrice != null;
   const hasDate = this.exitDate != null;
   if (hasPrice !== hasDate) {
@@ -89,6 +103,7 @@ export function toApi(doc, defaultBroker = null) {
     exitPrice: doc.exitPrice ?? null,
     exitDate: doc.exitDate ?? null,
     margin: doc.margin ?? 0,
+    pnlOverride: doc.pnlOverride ?? null,
     broker: doc.broker || defaultBroker,
     splitFrom: doc.splitFrom ? String(doc.splitFrom) : null,
     createdAt: doc.createdAt,
@@ -98,6 +113,7 @@ export function toApi(doc, defaultBroker = null) {
   return {
     ...trade,
     realizedPnl: closed ? realizedPnl(trade) : null,
+    calculatedPnl: closed ? calculatedPnlCents(trade) / 100 : null,
     returnPct: closed ? returnPct(trade) : null,
     daysHeld: closed ? daysBetween(trade.entryDate, trade.exitDate) : null,
   };

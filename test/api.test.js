@@ -327,6 +327,41 @@ describe('trades API', () => {
     assert.equal((await call('GET', '/summary?term=weekly')).status, 400);
   });
 
+  test('the final profit or loss of a closed trade can be edited', async () => {
+    const { body: position } = await addBuy({ quantity: 10, entryPrice: 50, margin: 2 });
+    const path = `/trades/${position.id}`;
+    await call('POST', `${path}/exit`, { exitPrice: 60, exitDate: '2026-09-25' }); // $100 − $2 = $98
+
+    const edited = await call('PATCH', path, { pnlOverride: 97.35 });
+    assert.equal(edited.status, 200);
+    assert.deepEqual(
+      [edited.body.realizedPnl, edited.body.calculatedPnl, edited.body.pnlOverride],
+      [97.35, 98, 97.35],
+    );
+
+    // A later price change keeps the edited amount; clearing it goes back to the calculation.
+    const repriced = await call('PATCH', path, { exitPrice: 61 });
+    assert.deepEqual([repriced.body.realizedPnl, repriced.body.calculatedPnl], [97.35, 108]);
+    const cleared = await call('PATCH', path, { pnlOverride: null });
+    assert.deepEqual([cleared.body.realizedPnl, cleared.body.pnlOverride], [108, null]);
+
+    await call('PATCH', path, { pnlOverride: -20 });
+    const { body: summary } = await call('GET', '/summary?today=2026-09-28');
+    assert.equal(summary.week.pnl, -20);
+
+    // Reopening drops the edited amount: an open trade has realized nothing.
+    const reopened = await call('PATCH', path, { exitPrice: null, exitDate: null });
+    assert.deepEqual([reopened.body.pnlOverride, reopened.body.realizedPnl], [null, null]);
+
+    const bad = await call('PATCH', path, {
+      exitPrice: 60,
+      exitDate: '2026-09-25',
+      pnlOverride: 'lots',
+    });
+    assert.equal(bad.status, 400);
+    assert.equal(bad.body.error, 'Realized P&L must be a number.');
+  });
+
   test('unknown ids get a 404', async () => {
     assert.equal((await call('PATCH', '/trades/not-an-id', { term: 'mid' })).status, 404);
   });

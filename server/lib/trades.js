@@ -23,10 +23,18 @@ export function grossCents(trade, exitPrice = trade.exitPrice, quantity = trade.
 
 export const marginCents = (trade) => toCents(trade.margin ?? 0);
 
-// Realized profit in cents: the price move minus margin, so margin deepens a
+// Calculated profit in cents: the price move minus margin, so margin deepens a
 // loss and shrinks a profit. Open trades have realized nothing.
-export function pnlCents(trade) {
+export function calculatedPnlCents(trade) {
   return isOpen(trade) ? 0 : grossCents(trade) - marginCents(trade);
+}
+
+// Realized profit in cents: the final amount typed in for the trade (pnlOverride),
+// if there is one, since fractional shares and approximate prices can make the
+// calculated amount a little off. Otherwise the calculated amount.
+export function pnlCents(trade) {
+  if (isOpen(trade)) return 0;
+  return trade.pnlOverride != null ? toCents(trade.pnlOverride) : calculatedPnlCents(trade);
 }
 
 export const realizedPnl = (trade) => pnlCents(trade) / 100;

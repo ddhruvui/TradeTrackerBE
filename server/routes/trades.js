@@ -25,9 +25,11 @@ const EDITABLE = [
   'exitDate',
   'margin',
   'broker',
+  'pnlOverride',
 ];
 
 // Copy only known fields; an empty string clears a field, and a cleared margin is $0.
+// A cleared pnlOverride goes back to the calculated profit or loss.
 function pickEditable(body = {}) {
   const fields = {};
   for (const key of EDITABLE) {

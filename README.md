@@ -54,6 +54,7 @@ The API has no login: anyone who knows its URL can read, change and delete trade
 - **Exits**: the sell price for a buy, the buy-back price for a short, and a date. Exiting fewer shares splits the position: the exited shares become their own closed trade (`splitFrom` points at the original) and the rest stays open.
 - **Realized profit** counts closed trades only, on their exit date. Buy: (exit − entry) × shares − margin. Short: (entry − exit) × shares − margin. So a $5 loss with $10 margin is −$15.
 - **Margin on partial exits** stays with the open part and is charged only when the last shares close.
+- **Edited profit or loss**: fractional shares and approximate prices can leave the calculated amount slightly off, so a closed trade's final profit or loss can be typed in (`pnlOverride`). It replaces the calculated amount in the trade's return and in every total, and stays when the trade's other fields change. Clearing it goes back to the calculation; reopening the trade drops it.
 - **Periods**: weeks run Friday to Thursday and reset every Friday; month and year are calendar periods.
 - **Order**: open positions first (newest entry on top), then closed trades by exit date, newest first.
 
@@ -65,10 +66,10 @@ The rules live in `server/lib/trades.js`. The frontend's live exit preview (`src
 | --- | --- | --- |
 | GET | `/` | Returns the API's name and routes |
 | GET | `/api/info` | Returns `{ testDb, brokers, defaultBroker }` |
-| GET | `/api/trades` | `?term=all\|short\|mid\|long`. Sorted; closed trades include `realizedPnl`, `returnPct` and `daysHeld`. |
+| GET | `/api/trades` | `?term=all\|short\|mid\|long`. Sorted; closed trades include `realizedPnl` (what counts), `calculatedPnl`, `returnPct` and `daysHeld`. |
 | GET | `/api/summary` | `?term=…&today=YYYY-MM-DD` (the viewer's date). Returns `week`, `month`, `year` and `overall`, each with `pnl`, `margin`, `count` and `from`; `week.to`; `openCount`; `firstDate`. |
 | POST | `/api/trades` | `symbol, side (buy/short), term, quantity, entryPrice, entryDate, margin?, broker?` |
-| PATCH | `/api/trades/:id` | Any of the fields above, plus `exitPrice, exitDate` (null both to reopen) |
+| PATCH | `/api/trades/:id` | Any of the fields above, plus `exitPrice, exitDate` (null both to reopen) and `pnlOverride` (a closed trade's final profit or loss; null goes back to the calculation) |
 | POST | `/api/trades/:id/exit` | `exitPrice, exitDate, quantity?` (omit for the whole position), `margin?` (replaces the position's margin) |
 | DELETE | `/api/trades/:id` | – |
 
