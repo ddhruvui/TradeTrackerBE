@@ -38,7 +38,7 @@ Saving `.env` while `npm run dev` runs restarts the API with the new values. A s
 
 ## Deploy on Vercel
 
-Vercel runs `index.js` at the repo root as a single function: it exports the Express app instead of listening on a port (locally, `server/index.js` does the listening). In the Vercel project:
+Vercel runs `index.js` at the repo root as a single function: it exports the Express app instead of listening on a port (locally, `server/index.js` does the listening). `vercel.json` sets the Express framework preset, so the project's dashboard preset doesn't matter. In the Vercel project:
 
 1. **Environment variables** (Settings → Environment Variables): `MONGO_URI`, `DB_PASSWORD`, `MONGO_DB`, `MONGO_DB_Test`, `TEST_DB`, `BROKERS`, `DEFAULT_BROKER`, with the same values as your `.env`. Redeploy after changing them.
 2. **MongoDB Atlas network access**: Vercel Functions don't have fixed IP addresses, so Atlas has to accept connections from anywhere (Network Access → Add IP Address → 0.0.0.0/0), or use Vercel's MongoDB Atlas integration.
