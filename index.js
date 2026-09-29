@@ -20,9 +20,7 @@ function ensureConnected() {
   return connection;
 }
 
-const app = express();
-app.disable('x-powered-by');
-app.use(async (req, res, next) => {
+async function requireDatabase(req, res, next) {
   try {
     await ensureConnected();
     next();
@@ -30,7 +28,10 @@ app.use(async (req, res, next) => {
     console.error(`Couldn't connect to MongoDB: ${err.message}`);
     res.status(503).json({ error: DATABASE_DOWN });
   }
-});
-app.use(createApp());
+}
+
+const app = express();
+app.disable('x-powered-by');
+app.use(createApp({ beforeRoutes: [requireDatabase] }));
 
 export default app;

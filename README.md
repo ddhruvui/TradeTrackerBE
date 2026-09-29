@@ -32,6 +32,7 @@ npm run dev            # API on http://localhost:4000
 | `TEST_DB` | `true` uses `MONGO_DB_Test`; `false` or missing uses `MONGO_DB`. Any other value stops the server, so a typo can't land on the real data. |
 | `BROKERS` | Broker codes and names as JSON in single quotes: `'{"R":"Robinhood","V":"Vanguard","ML":"Merrill Lynch"}'` |
 | `DEFAULT_BROKER` | Broker for new trades (optional; the first broker otherwise) |
+| `CORS_ORIGINS` | Sites whose browsers may call the API, comma-separated, e.g. the dashboard's Render address. `*` allows any site. Not needed locally, where the dashboard's dev server forwards `/api`. |
 | `API_PORT`, `HOST` | Optional; default `4000` and `127.0.0.1` |
 
 Saving `.env` while `npm run dev` runs restarts the API with the new values. A shell variable wins over `.env` (`TEST_DB=true npm start`).
@@ -40,7 +41,7 @@ Saving `.env` while `npm run dev` runs restarts the API with the new values. A s
 
 Vercel runs `index.js` at the repo root as a single function: it exports the Express app instead of listening on a port (locally, `server/index.js` does the listening). `vercel.json` sets the Express framework preset, so the project's dashboard preset doesn't matter. In the Vercel project:
 
-1. **Environment variables** (Settings → Environment Variables): `MONGO_URI`, `DB_PASSWORD`, `MONGO_DB`, `MONGO_DB_Test`, `TEST_DB`, `BROKERS`, `DEFAULT_BROKER`, with the same values as your `.env`. Redeploy after changing them.
+1. **Environment variables** (Settings → Environment Variables): `MONGO_URI`, `DB_PASSWORD`, `MONGO_DB`, `MONGO_DB_Test`, `TEST_DB`, `BROKERS`, `DEFAULT_BROKER`, with the same values as your `.env`, plus `CORS_ORIGINS` set to the dashboard's address (for example `https://trade-tracker-fe.onrender.com`). Redeploy after changing them.
 2. **MongoDB Atlas network access**: Vercel Functions don't have fixed IP addresses, so Atlas has to accept connections from anywhere (Network Access → Add IP Address → 0.0.0.0/0), or use Vercel's MongoDB Atlas integration.
 
 If the database can't be reached, requests get a 503 with a short message, and the reason is written to the function logs.

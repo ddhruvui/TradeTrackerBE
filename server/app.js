@@ -4,10 +4,20 @@ import { summaryRouter } from './routes/summary.js';
 import { errorHandler } from './errors.js';
 import { usesTestDb } from './db.js';
 import { loadBrokers } from './brokers.js';
+import { allowedOrigins, cors } from './cors.js';
 
-export function createApp({ brokers = loadBrokers() } = {}) {
+// beforeRoutes: middleware that runs after CORS and before any route
+// (the Vercel entry uses it to wait for the database).
+export function createApp({
+  brokers = loadBrokers(),
+  corsOrigins = allowedOrigins(),
+  beforeRoutes = [],
+} = {}) {
   const app = express();
   app.disable('x-powered-by');
+  // CORS first, so preflights and error responses carry its headers too.
+  app.use(cors(corsOrigins));
+  for (const middleware of beforeRoutes) app.use(middleware);
   app.use(express.json({ limit: '100kb' }));
   app.locals.brokers = brokers;
 
