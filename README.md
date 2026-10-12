@@ -56,6 +56,7 @@ The API has no login: anyone who knows its URL can read, change and delete trade
 - **Margin on partial exits** stays with the open part and is charged only when the last shares close.
 - **Edited profit or loss**: fractional shares and approximate prices can leave the calculated amount slightly off, so a closed trade's final profit or loss can be typed in (`pnlOverride`). It replaces the calculated amount in the trade's return and in every total, and stays when the trade's other fields change. Clearing it goes back to the calculation; reopening the trade drops it.
 - **Periods**: weeks run Friday to Thursday and reset every Friday; month and year are calendar periods.
+- **Investment**: each term has an amount invested, set from the dashboard and stored in the `settings` collection; All is the sum of the three. Realized profit is also given as a percentage of the investment behind the view: under a term filter that term's amount, under All the total. With nothing invested there's no percentage.
 - **Order**: open positions first (newest entry on top), then closed trades by exit date, newest first.
 
 The rules live in `server/lib/trades.js`. The frontend's live exit preview (`src/preview.js` in TradeTrackerFE) mirrors the exit rule, so change both together.
@@ -66,8 +67,10 @@ The rules live in `server/lib/trades.js`. The frontend's live exit preview (`src
 | --- | --- | --- |
 | GET | `/` | Returns the API's name and routes |
 | GET | `/api/info` | Returns `{ testDb, brokers, defaultBroker }` |
-| GET | `/api/trades` | `?term=all\|short\|mid\|long`. Sorted; closed trades include `realizedPnl` (what counts), `calculatedPnl`, `returnPct` and `daysHeld`. |
-| GET | `/api/summary` | `?term=…&today=YYYY-MM-DD` (the viewer's date). Returns `week`, `month`, `year` and `overall`, each with `pnl`, `margin`, `count` and `from`; `week.to`; `openCount`; `firstDate`. |
+| GET | `/api/trades` | `?term=all\|short\|mid\|long`. Sorted; closed trades include `realizedPnl` (what counts), `calculatedPnl`, `returnPct` (on the trade's cost), `pctOfInvestment` (of the selected term's investment) and `daysHeld`. |
+| GET | `/api/summary` | `?term=…&today=YYYY-MM-DD` (the viewer's date). Returns `week`, `month`, `year` and `overall`, each with `pnl`, `pctOfInvestment`, `margin`, `count` and `from`; `week.to`; `openCount`; `firstDate`; `investment` and `invested` (the amount behind the selected term). |
+| GET | `/api/investment` | Returns `{ short, mid, long, all }`: the amount invested in each term and their sum |
+| PATCH | `/api/investment` | Any of `short, mid, long` ($0 or more; empty means $0) |
 | POST | `/api/trades` | `symbol, side (buy/short), term, quantity, entryPrice, entryDate, margin?, broker?` |
 | PATCH | `/api/trades/:id` | Any of the fields above, plus `exitPrice, exitDate` (null both to reopen) and `pnlOverride` (a closed trade's final profit or loss; null goes back to the calculation) |
 | POST | `/api/trades/:id/exit` | `exitPrice, exitDate, quantity?` (omit for the whole position), `margin?` (replaces the position's margin) |

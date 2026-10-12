@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
 import { Trade, toApi } from '../models/Trade.js';
+import { loadInvestment } from '../models/Investment.js';
 import { HttpError } from '../errors.js';
 import {
   closesPosition,
   exitProblem,
   filterByTerm,
+  investedFor,
   isOpen,
+  pctOf,
   roundQty,
   sortTrades,
 } from '../lib/trades.js';
@@ -60,10 +63,20 @@ async function findTrade(id) {
 
 // Open positions first (newest entry on top), then closed trades by exit date, newest first.
 // ?term=short|mid|long narrows the list; missing or "all" returns everything.
+// Closed trades carry pctOfInvestment: their realized profit as a percentage of the
+// money invested in this view (that term's amount, or all three for All).
 tradesRouter.get('/', async (req, res) => {
   const term = termParam(req.query.term);
-  const trades = (await Trade.find().lean()).map((doc) => view(req, doc));
-  res.json(sortTrades(filterByTerm(trades, term)));
+  const [docs, investment] = await Promise.all([Trade.find().lean(), loadInvestment()]);
+  const invested = investedFor(investment, term);
+  const trades = filterByTerm(
+    docs.map((doc) => view(req, doc)),
+    term,
+  ).map((trade) => ({
+    ...trade,
+    pctOfInvestment: trade.realizedPnl == null ? null : pctOf(trade.realizedPnl, invested),
+  }));
+  res.json(sortTrades(trades));
 });
 
 tradesRouter.post('/', async (req, res) => {

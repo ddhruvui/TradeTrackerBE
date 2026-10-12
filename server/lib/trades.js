@@ -89,6 +89,15 @@ export const yearStart = (today) => `${today.slice(0, 4)}-01-01`;
 export const filterByTerm = (trades, term) =>
   term === 'all' ? trades : trades.filter((trade) => trade.term === term);
 
+// The money behind a view: one term's invested amount, or all three added up for All.
+export function investedFor(investment, term) {
+  if (term !== 'all') return investment[term] ?? 0;
+  return TERMS.reduce((sum, key) => sum + (investment[key] ?? 0), 0);
+}
+
+// An amount as a percentage of the investment; null when nothing is invested.
+export const pctOf = (amount, invested) => (invested > 0 ? (amount * 100) / invested : null);
+
 // Realized profit for this week, month, year and overall. A trade counts in
 // a period when its exit date falls in it; open trades never count.
 export function summarize(trades, today) {

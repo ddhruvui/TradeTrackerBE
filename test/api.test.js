@@ -6,6 +6,7 @@ import '../server/env.js';
 import { connectDb, disconnectDb } from '../server/db.js';
 import { createApp } from '../server/app.js';
 import { Trade } from '../server/models/Trade.js';
+import { Investment } from '../server/models/Investment.js';
 import { realizedPnl } from '../server/lib/trades.js';
 
 // These tests write to MongoDB and clear it, so they force MONGO_DB_Test
@@ -26,10 +27,12 @@ before(async () => {
   baseUrl = `http://127.0.0.1:${server.address().port}/api`;
 });
 
-beforeEach(() => Trade.deleteMany({}));
+const clearDatabase = () => Promise.all([Trade.deleteMany({}), Investment.deleteMany({})]);
+
+beforeEach(clearDatabase);
 
 after(async () => {
-  if (mongoose.connection.readyState === 1) await Trade.deleteMany({});
+  if (mongoose.connection.readyState === 1) await clearDatabase();
   server?.close();
   await disconnectDb();
 });
@@ -360,6 +363,54 @@ describe('trades API', () => {
     });
     assert.equal(bad.status, 400);
     assert.equal(bad.body.error, 'Realized P&L must be a number.');
+  });
+
+  test('saves the amount invested in each term; All is their sum', async () => {
+    assert.deepEqual((await call('GET', '/investment')).body, { short: 0, mid: 0, long: 0, all: 0 });
+
+    const saved = await call('PATCH', '/investment', { short: 1000, mid: 2500 });
+    assert.equal(saved.status, 200);
+    assert.deepEqual(saved.body, { short: 1000, mid: 2500, long: 0, all: 3500 });
+
+    const updated = await call('PATCH', '/investment', { long: 6500, mid: '' });
+    assert.deepEqual(updated.body, { short: 1000, mid: 0, long: 6500, all: 7500 });
+
+    const negative = await call('PATCH', '/investment', { short: -5 });
+    assert.equal(negative.status, 400);
+    assert.equal(negative.body.error, 'Short term investment must be $0 or more.');
+    const text = await call('PATCH', '/investment', { long: 'lots' });
+    assert.equal(text.status, 400);
+    assert.equal(text.body.error, 'Long term investment must be a number.');
+  });
+
+  test('shows profit as a share of the investment behind the selected view', async () => {
+    await call('PATCH', '/investment', { short: 1000, mid: 3000 });
+    const { body: shortTrade } = await addBuy({ quantity: 10, entryPrice: 50 });
+    await call('POST', `/trades/${shortTrade.id}/exit`, { exitPrice: 60, exitDate: '2026-09-25' }); // +$100
+    const { body: midTrade } = await addBuy({ quantity: 10, entryPrice: 50, term: 'mid' });
+    await call('POST', `/trades/${midTrade.id}/exit`, { exitPrice: 44, exitDate: '2026-09-25' }); // −$60
+    await addBuy(); // open: no percentage
+
+    // Under All, each trade is measured against everything invested ($4,000).
+    const all = await call('GET', '/trades');
+    const pct = Object.fromEntries(all.body.map((t) => [t.id, t.pctOfInvestment]));
+    assert.deepEqual([pct[shortTrade.id], pct[midTrade.id]], [2.5, -1.5]);
+    assert.equal(all.body.find((t) => t.exitPrice == null).pctOfInvestment, null);
+
+    // Under a term filter, against that term's amount ($1,000 for short).
+    const shortOnly = await call('GET', '/trades?term=short');
+    assert.equal(shortOnly.body.find((t) => t.id === shortTrade.id).pctOfInvestment, 10);
+
+    const { body: summary } = await call('GET', '/summary?today=2026-09-28');
+    assert.deepEqual(summary.investment, { short: 1000, mid: 3000, long: 0, all: 4000 });
+    assert.equal(summary.invested, 4000);
+    assert.equal(summary.week.pctOfInvestment, 1); // +$40 of $4,000
+    const mid = await call('GET', '/summary?today=2026-09-28&term=mid');
+    assert.deepEqual([mid.body.invested, mid.body.week.pctOfInvestment], [3000, -2]);
+
+    // Nothing invested in long term: no percentage.
+    const long = await call('GET', '/summary?today=2026-09-28&term=long');
+    assert.equal(long.body.week.pctOfInvestment, null);
   });
 
   test('unknown ids get a 404', async () => {

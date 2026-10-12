@@ -5,6 +5,8 @@ import {
   exitPnlCents,
   exitProblem,
   filterByTerm,
+  investedFor,
+  pctOf,
   isISODate,
   pnlCents,
   realizedPnl,
@@ -178,6 +180,21 @@ describe('exitProblem', () => {
     assert.match(exitProblem(position, { ...exit, exitDate: '2026-09-09' }), /before the entry date/);
     assert.equal(exitProblem(position, { ...exit, margin: -1 }), 'Margin must be $0 or more.');
     assert.match(exitProblem({ ...position, exitPrice: 5, exitDate: '2026-09-11' }, exit), /already closed/);
+  });
+});
+
+describe('investment', () => {
+  test('All is the three terms added up', () => {
+    const investment = { short: 1000, mid: 2500, long: 6500 };
+    assert.equal(investedFor(investment, 'all'), 10000);
+    assert.equal(investedFor(investment, 'mid'), 2500);
+    assert.equal(investedFor({}, 'all'), 0);
+  });
+
+  test('a percentage needs something invested', () => {
+    assert.equal(pctOf(250, 10000), 2.5);
+    assert.equal(pctOf(-40, 1000), -4);
+    assert.equal(pctOf(250, 0), null);
   });
 });
 

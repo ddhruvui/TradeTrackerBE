@@ -19,6 +19,9 @@ const FIELD_LABELS = {
   margin: 'Margin',
   broker: 'Broker',
   pnlOverride: 'Realized P&L',
+  short: 'Short term investment',
+  mid: 'Mid term investment',
+  long: 'Long term investment',
 };
 
 function describe(err) {
