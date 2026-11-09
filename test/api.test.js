@@ -76,25 +76,36 @@ describe('trades API', () => {
     assert.equal(realizedPnl(body.closed), -15);
   });
 
-  test('margin stays with the open part until the last shares close', async () => {
+  test('a partial exit pays its share of a typed margin; the open part keeps the rest', async () => {
     const { body: position } = await addBuy({ quantity: 100, entryPrice: 50, margin: 10 });
     const path = `/trades/${position.id}/exit`;
 
-    // Partial exit with the margin raised to $12: none of it is charged yet.
-    const first = await call('POST', path, {
-      quantity: 40,
-      exitPrice: 51,
-      exitDate: '2026-09-25',
-      margin: 12,
-    });
-    assert.equal(first.body.closed.margin, 0);
-    assert.equal(realizedPnl(first.body.closed), 40);
-    assert.equal(first.body.remaining.margin, 12);
+    // 40 of 100 shares pay 40% of the $10.
+    const first = await call('POST', path, { quantity: 40, exitPrice: 51, exitDate: '2026-09-25' });
+    assert.equal(first.body.closed.margin, 4);
+    assert.equal(realizedPnl(first.body.closed), 40 - 4);
+    assert.equal(first.body.remaining.margin, 6);
 
-    // Final exit: the whole $12 comes off this exit's profit.
+    // Final exit: the $6 left comes off this exit's profit.
     const last = await call('POST', path, { exitPrice: 51, exitDate: '2026-09-28' });
-    assert.equal(last.body.closed.margin, 12);
-    assert.equal(realizedPnl(last.body.closed), 60 - 12);
+    assert.equal(last.body.closed.margin, 6);
+    assert.equal(realizedPnl(last.body.closed), 60 - 6);
+  });
+
+  test('a partial exit pays the margin sent with it; an auto margin stays auto', async () => {
+    const { body: position } = await addBuy({ quantity: 20, entryPrice: 50 }); // $0 = auto
+    const path = `/trades/${position.id}/exit`;
+
+    // The dashboard sends the exited shares' share of the 6%/yr margin.
+    const first = await call('POST', path, {
+      quantity: 10,
+      exitPrice: 52,
+      exitDate: '2026-09-25',
+      margin: 3.5,
+    });
+    assert.equal(first.body.closed.margin, 3.5);
+    assert.equal(realizedPnl(first.body.closed), 20 - 3.5);
+    assert.equal(first.body.remaining.margin, 0);
   });
 
   test('rejects a negative margin', async () => {

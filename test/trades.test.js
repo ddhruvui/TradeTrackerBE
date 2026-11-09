@@ -6,6 +6,7 @@ import {
   exitProblem,
   filterByTerm,
   investedFor,
+  marginSplit,
   pctOf,
   isISODate,
   pnlCents,
@@ -65,11 +66,32 @@ describe('margin', () => {
     assert.equal(realizedPnl(closedOn('2026-01-06', 90, { side: 'short', margin: 30 })), 70);
   });
 
-  test('is charged only on the exit that closes the position', () => {
+  test('every exit pays its share: 40 of 100 shares pays 40%', () => {
     const position = trade({ quantity: 100, margin: 25 });
-    assert.equal(exitPnlCents(position, { exitPrice: 101, quantity: 40 }), 4000);
+    assert.equal(exitPnlCents(position, { exitPrice: 101, quantity: 40 }), 4000 - 1000);
     assert.equal(exitPnlCents(position, { exitPrice: 101, quantity: 100 }), 7500);
     assert.equal(exitPnlCents(position, { exitPrice: 101, quantity: 100, margin: 30 }), 7000);
+    assert.equal(exitPnlCents(position, { exitPrice: 101, quantity: 40, margin: 12 }), 4000 - 1200);
+  });
+
+  test('a typed margin splits so the parts add up to the whole', () => {
+    // $17.65 over 20 shares: 10 pay $8.83 (rounded up), the 10 left keep $8.82.
+    assert.deepEqual(marginSplit(trade({ quantity: 20, margin: 17.65 }), 10), { charged: 8.83, kept: 8.82 });
+    assert.deepEqual(marginSplit(trade({ quantity: 20, margin: 20 }), 10), { charged: 10, kept: 10 });
+    // An amount entered for the exit is what it pays; the open part keeps the rest.
+    assert.deepEqual(marginSplit(trade({ quantity: 20, margin: 20 }), 10, 12), { charged: 12, kept: 8 });
+    assert.deepEqual(marginSplit(trade({ quantity: 20, margin: 20 }), 10, 25), { charged: 25, kept: 0 });
+  });
+
+  test('an auto margin ($0) stays auto on the open part', () => {
+    // The dashboard works out the 6%/yr share and sends it; nothing is fixed on the shares left.
+    assert.deepEqual(marginSplit(trade({ quantity: 20, margin: 0 }), 10, 8.83), { charged: 8.83, kept: 0 });
+    assert.deepEqual(marginSplit(trade({ quantity: 20, margin: 0 }), 10), { charged: 0, kept: 0 });
+  });
+
+  test('the exit that closes the position pays all that is left', () => {
+    assert.deepEqual(marginSplit(trade({ quantity: 10, margin: 8.82 }), 10), { charged: 8.82, kept: 0 });
+    assert.deepEqual(marginSplit(trade({ quantity: 10, margin: 0 }), 10, 7.46), { charged: 7.46, kept: 0 });
   });
 
   test('return percentage is net of margin', () => {

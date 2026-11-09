@@ -7,6 +7,7 @@ import {
   closesPosition,
   exitProblem,
   filterByTerm,
+  marginSplit,
   investedFor,
   isOpen,
   pctOf,
@@ -97,8 +98,9 @@ tradesRouter.patch('/:id', async (req, res) => {
 
 // Sell a buy, or buy back a short. Exiting fewer shares than the position holds
 // splits it: the exited shares become their own closed trade and the rest stays open.
-// The margin sent with the exit replaces the position's margin; it is charged only
-// on the exit that closes the last shares.
+// Every exit pays its share of the margin (exiting 10 of 20 shares pays half). The
+// margin sent with the exit, if any, is what this exit pays; see marginSplit for
+// what the open part keeps.
 tradesRouter.post('/:id/exit', async (req, res) => {
   const trade = await findTrade(req.params.id);
   const body = req.body ?? {};
@@ -107,23 +109,23 @@ tradesRouter.post('/:id/exit', async (req, res) => {
     quantity: given(body.quantity) ? Number(body.quantity) : trade.quantity,
     exitPrice: Number(body.exitPrice),
     exitDate: body.exitDate,
-    margin: given(body.margin) ? Number(body.margin) : (trade.margin ?? 0),
+    margin: given(body.margin) ? Number(body.margin) : undefined,
   };
   const problem = exitProblem(trade, exit);
   if (problem) throw new HttpError(isOpen(trade) ? 400 : 409, problem);
+  const { charged, kept } = marginSplit(trade, exit.quantity, exit.margin);
 
   if (closesPosition(trade, exit.quantity)) {
-    trade.set({ exitPrice: exit.exitPrice, exitDate: exit.exitDate, margin: exit.margin });
+    trade.set({ exitPrice: exit.exitPrice, exitDate: exit.exitDate, margin: charged });
     await trade.save();
     return res.json({ closed: view(req, trade), remaining: null });
   }
 
   // Shrink the open position only if nothing changed it since we read it.
-  // It keeps the margin until its last shares close.
   const remainingQty = roundQty(trade.quantity - exit.quantity);
   const remaining = await Trade.findOneAndUpdate(
     { _id: trade._id, exitPrice: null, quantity: trade.quantity },
-    { $set: { quantity: remainingQty, margin: exit.margin } },
+    { $set: { quantity: remainingQty, margin: kept } },
     { returnDocument: 'after' },
   );
   if (!remaining) {
@@ -141,7 +143,7 @@ tradesRouter.post('/:id/exit', async (req, res) => {
       entryDate: trade.entryDate,
       exitPrice: exit.exitPrice,
       exitDate: exit.exitDate,
-      margin: 0,
+      margin: charged,
       splitFrom: trade._id,
     });
     res.json({ closed: view(req, closed), remaining: view(req, remaining) });

@@ -42,11 +42,29 @@ export const realizedPnl = (trade) => pnlCents(trade) / 100;
 // True when exiting this many shares leaves nothing open.
 export const closesPosition = (trade, quantity) => roundQty(trade.quantity - quantity) <= 0;
 
-// What an exit would realize. Margin stays with the position and is charged
-// only on the exit that closes its last shares.
-export function exitPnlCents(trade, { exitPrice, quantity, margin = trade.margin ?? 0 }) {
-  const charged = closesPosition(trade, quantity) ? toCents(margin) : 0;
-  return grossCents(trade, exitPrice, quantity) - charged;
+// How an exit splits the position's margin, in dollars. Every exit pays its share:
+// exiting 10 of 20 shares charges half. `given` is the amount the person entered
+// for this exit; without it the share comes from the position's margin, rounded up
+// to the cent. What the open part keeps:
+// - a typed (fixed) margin keeps the rest of it, so the parts add up to the whole;
+// - an auto margin ($0, worked out at 6% a year by the dashboard) stays auto and
+//   keeps accruing on the shares left.
+export function marginSplit(trade, quantity, given) {
+  const marginCentsNow = marginCents(trade);
+  if (closesPosition(trade, quantity)) {
+    return { charged: given ?? marginCentsNow / 100, kept: 0 };
+  }
+  const shareCents = Math.ceil(Number(((marginCentsNow * quantity) / trade.quantity).toFixed(6)));
+  const charged = given ?? shareCents / 100;
+  const kept = marginCentsNow > 0 ? Math.max(0, marginCentsNow - toCents(charged)) / 100 : 0;
+  return { charged, kept };
+}
+
+// What an exit would realize: the price move on the exited shares minus the
+// margin this exit pays (see marginSplit).
+export function exitPnlCents(trade, { exitPrice, quantity, margin }) {
+  const { charged } = marginSplit(trade, quantity, margin);
+  return grossCents(trade, exitPrice, quantity) - toCents(charged);
 }
 
 // Net return on the money put in (entry price × shares).
