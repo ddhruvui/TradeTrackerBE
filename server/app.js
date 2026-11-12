@@ -2,6 +2,7 @@ import express from 'express';
 import { tradesRouter } from './routes/trades.js';
 import { summaryRouter } from './routes/summary.js';
 import { investmentRouter } from './routes/investment.js';
+import { pricesRouter } from './routes/prices.js';
 import { errorHandler } from './errors.js';
 import { usesTestDb } from './db.js';
 import { loadBrokers } from './brokers.js';
@@ -33,13 +34,14 @@ export function createApp({
   app.use('/api/trades', tradesRouter);
   app.use('/api/summary', summaryRouter);
   app.use('/api/investment', investmentRouter);
+  app.use('/api/prices', pricesRouter);
   app.use('/api', (req, res) => res.status(404).json({ error: 'Unknown API route.' }));
 
   // Opening the bare URL (for example the Vercel domain) shows what's here.
   app.get('/', (req, res) =>
     res.json({
       name: 'Trade Tracker API',
-      routes: ['/api/info', '/api/trades', '/api/summary', '/api/investment'],
+      routes: ['/api/info', '/api/trades', '/api/summary', '/api/investment', '/api/prices'],
     }),
   );
   app.use((req, res) => res.status(404).json({ error: 'Not found. The API lives under /api.' }));

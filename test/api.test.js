@@ -8,10 +8,13 @@ import { createApp } from '../server/app.js';
 import { Trade } from '../server/models/Trade.js';
 import { Investment } from '../server/models/Investment.js';
 import { realizedPnl } from '../server/lib/trades.js';
+import { lastPriceCollection } from '../server/models/LastPrice.js';
 
 // These tests write to MongoDB and clear it, so they force MONGO_DB_Test
 // whatever TEST_DB says in .env. The broker list is pinned so edits to .env can't break them.
 process.env.TEST_DB = 'true';
+// Last prices are read from the test database too, never the real LastPrice upload.
+process.env.LAST_PRICE_DB = process.env.MONGO_DB_Test;
 process.env.BROKERS = '{"R":"Robinhood","V":"Vanguard","ML":"Merrill Lynch"}';
 process.env.DEFAULT_BROKER = 'R';
 
@@ -27,7 +30,8 @@ before(async () => {
   baseUrl = `http://127.0.0.1:${server.address().port}/api`;
 });
 
-const clearDatabase = () => Promise.all([Trade.deleteMany({}), Investment.deleteMany({})]);
+const clearDatabase = () =>
+  Promise.all([Trade.deleteMany({}), Investment.deleteMany({}), lastPriceCollection().deleteMany({})]);
 
 beforeEach(clearDatabase);
 
@@ -426,5 +430,32 @@ describe('trades API', () => {
 
   test('unknown ids get a 404', async () => {
     assert.equal((await call('PATCH', '/trades/not-an-id', { term: 'mid' })).status, 404);
+  });
+});
+
+describe('prices API', () => {
+  test('no upload yet gives no prices', async () => {
+    const { status, body } = await call('GET', '/prices');
+    assert.equal(status, 200);
+    assert.deepEqual(body, { uploadedAt: null, prices: {} });
+  });
+
+  test('the latest upload comes back as ticker → price, skipping unusable rows', async () => {
+    assert.equal(lastPriceCollection().conn.db.databaseName, process.env.MONGO_DB_Test);
+    await lastPriceCollection().insertOne({
+      _id: 'latest',
+      uploadedAt: '2026-11-12T20:32:22.207Z',
+      values: [
+        { ticker: 'NVDA', price: 163.44 },
+        { ticker: ' brk-b ', price: 589.92 },
+        { ticker: 'BAD', price: null },
+        { ticker: '', price: 10 },
+      ],
+    });
+    const { body } = await call('GET', '/prices');
+    assert.deepEqual(body, {
+      uploadedAt: '2026-11-12T20:32:22.207Z',
+      prices: { NVDA: 163.44, 'BRK-B': 589.92 },
+    });
   });
 });

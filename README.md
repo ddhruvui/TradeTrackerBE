@@ -71,6 +71,7 @@ The rules live in `server/lib/trades.js`. The frontend's live exit preview (`src
 | GET | `/api/summary` | `?term=…&today=YYYY-MM-DD` (the viewer's date). Returns `week`, `month`, `year` and `overall`, each with `pnl`, `pctOfInvestment`, `margin`, `count` and `from`; `week.to`; `openCount`; `firstDate`; `investment` and `invested` (the amount behind the selected term). |
 | GET | `/api/investment` | Returns `{ short, mid, long, all }`: the amount invested in each term and their sum |
 | PATCH | `/api/investment` | Any of `short, mid, long` ($0 or more; empty means $0) |
+| GET | `/api/prices` | Returns `{ uploadedAt, prices: { TICKER: lastPrice } }` from the `LastPrice` database (its `LastPrice` collection, document `latest`), which is uploaded separately. `LAST_PRICE_DB` names another database. |
 | POST | `/api/trades` | `symbol, side (buy/short), term, quantity, entryPrice, entryDate, margin?, broker?` |
 | PATCH | `/api/trades/:id` | Any of the fields above, plus `exitPrice, exitDate` (null both to reopen) and `pnlOverride` (a closed trade's final profit or loss; null goes back to the calculation) |
 | POST | `/api/trades/:id/exit` | `exitPrice, exitDate, quantity?` (omit for the whole position), `margin?` (what this exit pays; without it, its share of a typed margin) |
