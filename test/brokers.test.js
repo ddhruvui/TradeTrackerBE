@@ -2,27 +2,27 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadBrokers } from '../server/brokers.js';
 
-const JSON_CONFIG = '{"R":"Robinhood","V":"Vanguard","ML":"Merrill Lynch"}';
+const JSON_CONFIG = '{"R":"Robinhood","F":"Fidelity","ML":"Merrill Lynch"}';
 
 test('reads BROKERS and DEFAULT_BROKER from .env', () => {
-  const brokers = loadBrokers({ BROKERS: JSON_CONFIG, DEFAULT_BROKER: 'v' });
-  assert.deepEqual(brokers.codes, ['R', 'V', 'ML']);
+  const brokers = loadBrokers({ BROKERS: JSON_CONFIG, DEFAULT_BROKER: 'f' });
+  assert.deepEqual(brokers.codes, ['R', 'F', 'ML']);
   assert.deepEqual(brokers.list[2], { code: 'ML', name: 'Merrill Lynch' });
-  assert.equal(brokers.defaultBroker, 'V');
+  assert.equal(brokers.defaultBroker, 'F');
 });
 
 test('the first broker is the default when DEFAULT_BROKER is missing', () => {
   assert.equal(loadBrokers({ BROKERS: '{"ml":"Merrill Lynch","R":"Robinhood"}' }).defaultBroker, 'ML');
 });
 
-test('falls back to R, V and ML with R as default when BROKERS is missing', () => {
+test('falls back to R, F and ML with R as default when BROKERS is missing', () => {
   const brokers = loadBrokers({});
-  assert.deepEqual(brokers.codes, ['R', 'V', 'ML']);
+  assert.deepEqual(brokers.codes, ['R', 'F', 'ML']);
   assert.equal(brokers.defaultBroker, 'R');
 });
 
 test('accepts the value with its single quotes, as pasted into a hosting dashboard', () => {
-  assert.deepEqual(loadBrokers({ BROKERS: `'${JSON_CONFIG}'` }).codes, ['R', 'V', 'ML']);
+  assert.deepEqual(loadBrokers({ BROKERS: `'${JSON_CONFIG}'` }).codes, ['R', 'F', 'ML']);
 });
 
 test('explains a broken config instead of starting with it', () => {

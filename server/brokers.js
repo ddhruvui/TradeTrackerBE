@@ -1,7 +1,7 @@
 // Brokers come from .env:
-//   BROKERS='{"R":"Robinhood","V":"Vanguard","ML":"Merrill Lynch"}'   short code → name
+//   BROKERS='{"R":"Robinhood","F":"Fidelity","ML":"Merrill Lynch"}'   short code → name
 //   DEFAULT_BROKER=R                                                  optional, else the first
-const FALLBACK = { R: 'Robinhood', V: 'Vanguard', ML: 'Merrill Lynch' };
+const FALLBACK = { R: 'Robinhood', F: 'Fidelity', ML: 'Merrill Lynch' };
 const CODE = /^[A-Z0-9]{1,6}$/;
 
 export function loadBrokers(env = process.env) {

@@ -15,7 +15,7 @@ import { lastPriceCollection } from '../server/models/LastPrice.js';
 process.env.TEST_DB = 'true';
 // Last prices are read from the test database too, never the real LastPrice upload.
 process.env.LAST_PRICE_DB = process.env.MONGO_DB_Test;
-process.env.BROKERS = '{"R":"Robinhood","V":"Vanguard","ML":"Merrill Lynch"}';
+process.env.BROKERS = '{"R":"Robinhood","F":"Fidelity","ML":"Merrill Lynch"}';
 process.env.DEFAULT_BROKER = 'R';
 
 let server;
@@ -244,7 +244,7 @@ describe('trades API', () => {
       testDb: true,
       brokers: [
         { code: 'R', name: 'Robinhood' },
-        { code: 'V', name: 'Vanguard' },
+        { code: 'F', name: 'Fidelity' },
         { code: 'ML', name: 'Merrill Lynch' },
       ],
       defaultBroker: 'R',
@@ -257,11 +257,11 @@ describe('trades API', () => {
 
     const unknown = await addBuy({ broker: 'E' });
     assert.equal(unknown.status, 400);
-    assert.equal(unknown.body.error, 'Broker must be one of R, V, ML.');
+    assert.equal(unknown.body.error, 'Broker must be one of R, F, ML.');
   });
 
   test('the broker can be changed and survives a partial exit', async () => {
-    const { body: position } = await addBuy({ broker: 'V' });
+    const { body: position } = await addBuy({ broker: 'F' });
     const moved = await call('PATCH', `/trades/${position.id}`, { broker: 'ML' });
     assert.equal(moved.body.broker, 'ML');
 

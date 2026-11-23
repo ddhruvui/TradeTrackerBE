@@ -30,7 +30,7 @@ npm run dev            # API on http://localhost:4000
 | `MONGO_DB` | Real (prod) database |
 | `MONGO_DB_Test` | Test database. Must differ from `MONGO_DB`. |
 | `TEST_DB` | `true` uses `MONGO_DB_Test`; `false` or missing uses `MONGO_DB`. Any other value stops the server, so a typo can't land on the real data. |
-| `BROKERS` | Broker codes and names as JSON in single quotes: `'{"R":"Robinhood","V":"Vanguard","ML":"Merrill Lynch"}'` |
+| `BROKERS` | Broker codes and names as JSON in single quotes: `'{"R":"Robinhood","F":"Fidelity","ML":"Merrill Lynch"}'` |
 | `DEFAULT_BROKER` | Broker for new trades (optional; the first broker otherwise) |
 | `CORS_ORIGINS` | Sites whose browsers may call the API, comma-separated, e.g. the dashboard's Render address. `*` allows any site. Not needed locally, where the dashboard's dev server forwards `/api`. |
 | `API_PORT`, `HOST` | Optional; default `4000` and `127.0.0.1` |
