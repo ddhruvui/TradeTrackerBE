@@ -20,18 +20,22 @@ process.env.DEFAULT_BROKER = 'R';
 
 let server;
 let baseUrl;
+// Yahoo Finance is stubbed: no network in the tests. Each test can swap the answer.
+let livePrices = async () => ({});
 
 before(async () => {
   const database = await connectDb();
   assert.equal(database.name, process.env.MONGO_DB_Test);
   assert.equal(mongoose.connection.db.databaseName, process.env.MONGO_DB_Test);
-  server = createApp().listen(0, '127.0.0.1');
+  server = createApp({ livePrices: () => livePrices() }).listen(0, '127.0.0.1');
   await once(server, 'listening');
   baseUrl = `http://127.0.0.1:${server.address().port}/api`;
 });
 
-const clearDatabase = () =>
-  Promise.all([Trade.deleteMany({}), Investment.deleteMany({}), lastPriceCollection().deleteMany({})]);
+const clearDatabase = () => {
+  livePrices = async () => ({});
+  return Promise.all([Trade.deleteMany({}), Investment.deleteMany({}), lastPriceCollection().deleteMany({})]);
+};
 
 beforeEach(clearDatabase);
 
@@ -437,7 +441,7 @@ describe('prices API', () => {
   test('no upload yet gives no prices', async () => {
     const { status, body } = await call('GET', '/prices');
     assert.equal(status, 200);
-    assert.deepEqual(body, { uploadedAt: null, prices: {} });
+    assert.deepEqual(body, { uploadedAt: null, prices: {}, live: {} });
   });
 
   test('the latest upload comes back as ticker → price, skipping unusable rows', async () => {
@@ -456,6 +460,34 @@ describe('prices API', () => {
     assert.deepEqual(body, {
       uploadedAt: '2026-11-12T20:32:22.207Z',
       prices: { NVDA: 163.44, 'BRK-B': 589.92 },
+      live: {},
     });
+  });
+
+  test('Yahoo prices are added on top of the upload and listed in live', async () => {
+    await lastPriceCollection().insertOne({
+      _id: 'latest',
+      uploadedAt: '2026-11-12T20:32:22.207Z',
+      values: [{ ticker: 'NVDA', price: 163.44 }, { ticker: 'WMT', price: 100 }],
+    });
+    livePrices = async () => ({
+      VOO: { price: 658.87, at: '2026-11-24T21:00:00.000Z' },
+      WMT: { price: 131.94, at: '2026-11-24T21:00:01.000Z' },
+    });
+    const { body } = await call('GET', '/prices');
+    assert.deepEqual(body, {
+      uploadedAt: '2026-11-12T20:32:22.207Z',
+      prices: { NVDA: 163.44, WMT: 131.94, VOO: 658.87 },
+      live: { VOO: '2026-11-24T21:00:00.000Z', WMT: '2026-11-24T21:00:01.000Z' },
+    });
+  });
+
+  test('a Yahoo failure still returns the upload', async () => {
+    livePrices = async () => {
+      throw new Error('Yahoo is down');
+    };
+    const { status, body } = await call('GET', '/prices');
+    assert.equal(status, 200);
+    assert.deepEqual(body, { uploadedAt: null, prices: {}, live: {} });
   });
 });

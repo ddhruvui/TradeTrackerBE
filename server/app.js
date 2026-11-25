@@ -7,13 +7,16 @@ import { errorHandler } from './errors.js';
 import { usesTestDb } from './db.js';
 import { loadBrokers } from './brokers.js';
 import { allowedOrigins, cors } from './cors.js';
+import { createYahooPrices } from './lib/yahoo.js';
 
 // beforeRoutes: middleware that runs after CORS and before any route
 // (the Vercel entry uses it to wait for the database).
+// livePrices: loads Yahoo Finance prices for /api/prices (the tests pass a stub).
 export function createApp({
   brokers = loadBrokers(),
   corsOrigins = allowedOrigins(),
   beforeRoutes = [],
+  livePrices = createYahooPrices(),
 } = {}) {
   const app = express();
   app.disable('x-powered-by');
@@ -22,6 +25,7 @@ export function createApp({
   for (const middleware of beforeRoutes) app.use(middleware);
   app.use(express.json({ limit: '100kb' }));
   app.locals.brokers = brokers;
+  app.locals.livePrices = livePrices;
 
   // What the UI needs from .env: the broker list and whether this is the test database.
   app.get('/api/info', (req, res) =>
