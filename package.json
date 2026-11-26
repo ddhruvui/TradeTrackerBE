@@ -11,6 +11,7 @@
     "dev": "nodemon --quiet --watch server --watch .env server/index.js",
     "dev:test": "TEST_DB=true nodemon --quiet --watch server --watch .env server/index.js",
     "start": "NODE_ENV=production node server/index.js",
+    "age-terms": "node scripts/age-terms.js",
     "test": "TEST_DB=true node --test --test-reporter=spec --test-concurrency=1 \"test/**/*.test.js\""
   },
   "dependencies": {

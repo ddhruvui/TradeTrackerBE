@@ -4,6 +4,7 @@
 export const SIDES = ['buy', 'short'];
 export const TERMS = ['short', 'mid', 'long'];
 export const TERM_LABELS = { short: 'Short term', mid: 'Mid term', long: 'Long term' };
+const TERM_LEVEL = { short: 1, mid: 2, long: 3 };
 
 export const isOpen = (trade) => trade.exitPrice == null;
 
@@ -93,6 +94,20 @@ export function localISODate(date = new Date()) {
 }
 
 export const addDays = (iso, days) => fromUTC(toUTC(iso) + days * DAY_MS);
+
+// The same day `months` later (or earlier when negative); past the end of a shorter
+// month it lands on that month's last day: Mar 31 − 1 month is Feb 28.
+export function addMonths(iso, months) {
+  const [year, month, day] = iso.split('-').map(Number);
+  const target = new Date(Date.UTC(year, month - 1 + months, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(day, lastDay));
+  return fromUTC(target.getTime());
+}
+
+// Today's date in New York (EST or EDT, whichever is in effect), like 2026-11-26.
+export const newYorkDate = (date = new Date()) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(date);
 export const daysBetween = (from, to) => Math.round((toUTC(to) - toUTC(from)) / DAY_MS);
 
 // Weeks run Friday through Thursday: a new week starts every Friday.
@@ -106,12 +121,6 @@ export const yearStart = (today) => `${today.slice(0, 4)}-01-01`;
 
 export const filterByTerm = (trades, term) =>
   term === 'all' ? trades : trades.filter((trade) => trade.term === term);
-
-// The money behind a view: one term's invested amount, or all three added up for All.
-export function investedFor(investment, term) {
-  if (term !== 'all') return investment[term] ?? 0;
-  return TERMS.reduce((sum, key) => sum + (investment[key] ?? 0), 0);
-}
 
 // An amount as a percentage of the investment; null when nothing is invested.
 export const pctOf = (amount, invested) => (invested > 0 ? (amount * 100) / invested : null);
@@ -190,4 +199,14 @@ export function exitProblem(trade, { quantity, exitPrice, exitDate, margin = tra
   if (exitDate < trade.entryDate) return 'The exit date can’t be before the entry date.';
   if (!(Number.isFinite(margin) && margin >= 0)) return 'Margin must be $0 or more.';
   return null;
+}
+
+// The term an open trade has grown into by `today`: held more than a month → mid term,
+// more than a year → long term. Terms only move up, so a term set by hand stays unless
+// age passes it, and closed trades keep theirs.
+export function agedTerm(trade, today) {
+  if (!isOpen(trade)) return trade.term;
+  const age =
+    trade.entryDate < addMonths(today, -12) ? 'long' : trade.entryDate < addMonths(today, -1) ? 'mid' : 'short';
+  return TERM_LEVEL[age] > TERM_LEVEL[trade.term] ? age : trade.term;
 }

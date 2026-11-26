@@ -8,7 +8,6 @@ import {
   exitProblem,
   filterByTerm,
   marginSplit,
-  investedFor,
   isOpen,
   pctOf,
   roundQty,
@@ -65,11 +64,11 @@ async function findTrade(id) {
 // Open positions first (newest entry on top), then closed trades by exit date, newest first.
 // ?term=short|mid|long narrows the list; missing or "all" returns everything.
 // Closed trades carry pctOfInvestment: their realized profit as a percentage of the
-// money invested in this view (that term's amount, or all three for All).
+// one amount invested (the same for every term).
 tradesRouter.get('/', async (req, res) => {
   const term = termParam(req.query.term);
   const [docs, investment] = await Promise.all([Trade.find().lean(), loadInvestment()]);
-  const invested = investedFor(investment, term);
+  const invested = investment.amount;
   const trades = filterByTerm(
     docs.map((doc) => view(req, doc)),
     term,

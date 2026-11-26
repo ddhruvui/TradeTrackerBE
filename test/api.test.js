@@ -9,6 +9,7 @@ import { Trade } from '../server/models/Trade.js';
 import { Investment } from '../server/models/Investment.js';
 import { realizedPnl } from '../server/lib/trades.js';
 import { lastPriceCollection } from '../server/models/LastPrice.js';
+import { ageOpenTerms } from '../server/jobs/ageTerms.js';
 
 // These tests write to MongoDB and clear it, so they force MONGO_DB_Test
 // whatever TEST_DB says in .env. The broker list is pinned so edits to .env can't break them.
@@ -384,52 +385,80 @@ describe('trades API', () => {
     assert.equal(bad.body.error, 'Realized P&L must be a number.');
   });
 
-  test('saves the amount invested in each term; All is their sum', async () => {
-    assert.deepEqual((await call('GET', '/investment')).body, { short: 0, mid: 0, long: 0, all: 0 });
+  test('saves the one amount invested', async () => {
+    assert.deepEqual((await call('GET', '/investment')).body, { amount: 0 });
 
-    const saved = await call('PATCH', '/investment', { short: 1000, mid: 2500 });
+    const saved = await call('PATCH', '/investment', { amount: 4000 });
     assert.equal(saved.status, 200);
-    assert.deepEqual(saved.body, { short: 1000, mid: 2500, long: 0, all: 3500 });
+    assert.deepEqual(saved.body, { amount: 4000 });
+    assert.deepEqual((await call('PATCH', '/investment', { amount: '' })).body, { amount: 0 });
 
-    const updated = await call('PATCH', '/investment', { long: 6500, mid: '' });
-    assert.deepEqual(updated.body, { short: 1000, mid: 0, long: 6500, all: 7500 });
-
-    const negative = await call('PATCH', '/investment', { short: -5 });
+    const negative = await call('PATCH', '/investment', { amount: -5 });
     assert.equal(negative.status, 400);
-    assert.equal(negative.body.error, 'Short term investment must be $0 or more.');
-    const text = await call('PATCH', '/investment', { long: 'lots' });
+    assert.equal(negative.body.error, 'Investment must be $0 or more.');
+    const text = await call('PATCH', '/investment', { amount: 'lots' });
     assert.equal(text.status, 400);
-    assert.equal(text.body.error, 'Long term investment must be a number.');
+    assert.equal(text.body.error, 'Investment must be a number.');
   });
 
-  test('shows profit as a share of the investment behind the selected view', async () => {
-    await call('PATCH', '/investment', { short: 1000, mid: 3000 });
+  test('reads per-term amounts saved before there was one amount as their sum', async () => {
+    await Investment.collection.insertOne({ _id: 'investment', short: 1000, mid: 2500 });
+    assert.deepEqual((await call('GET', '/investment')).body, { amount: 3500 });
+
+    await call('PATCH', '/investment', { amount: 5000 });
+    const doc = await Investment.collection.findOne({ _id: 'investment' });
+    assert.deepEqual([doc.amount, doc.short, doc.mid], [5000, undefined, undefined]);
+  });
+
+  test('measures profit against the one investment in every view', async () => {
+    await call('PATCH', '/investment', { amount: 4000 });
     const { body: shortTrade } = await addBuy({ quantity: 10, entryPrice: 50 });
     await call('POST', `/trades/${shortTrade.id}/exit`, { exitPrice: 60, exitDate: '2026-09-25' }); // +$100
     const { body: midTrade } = await addBuy({ quantity: 10, entryPrice: 50, term: 'mid' });
     await call('POST', `/trades/${midTrade.id}/exit`, { exitPrice: 44, exitDate: '2026-09-25' }); // −$60
     await addBuy(); // open: no percentage
 
-    // Under All, each trade is measured against everything invested ($4,000).
     const all = await call('GET', '/trades');
     const pct = Object.fromEntries(all.body.map((t) => [t.id, t.pctOfInvestment]));
     assert.deepEqual([pct[shortTrade.id], pct[midTrade.id]], [2.5, -1.5]);
     assert.equal(all.body.find((t) => t.exitPrice == null).pctOfInvestment, null);
 
-    // Under a term filter, against that term's amount ($1,000 for short).
+    // A term filter narrows the trades, not the investment.
     const shortOnly = await call('GET', '/trades?term=short');
-    assert.equal(shortOnly.body.find((t) => t.id === shortTrade.id).pctOfInvestment, 10);
+    assert.equal(shortOnly.body.find((t) => t.id === shortTrade.id).pctOfInvestment, 2.5);
 
     const { body: summary } = await call('GET', '/summary?today=2026-09-28');
-    assert.deepEqual(summary.investment, { short: 1000, mid: 3000, long: 0, all: 4000 });
     assert.equal(summary.invested, 4000);
     assert.equal(summary.week.pctOfInvestment, 1); // +$40 of $4,000
     const mid = await call('GET', '/summary?today=2026-09-28&term=mid');
-    assert.deepEqual([mid.body.invested, mid.body.week.pctOfInvestment], [3000, -2]);
+    assert.deepEqual([mid.body.invested, mid.body.week.pctOfInvestment], [4000, -1.5]);
 
-    // Nothing invested in long term: no percentage.
-    const long = await call('GET', '/summary?today=2026-09-28&term=long');
-    assert.equal(long.body.week.pctOfInvestment, null);
+    // Nothing invested: no percentage.
+    await call('PATCH', '/investment', { amount: 0 });
+    const none = await call('GET', '/summary?today=2026-09-28');
+    assert.equal(none.body.week.pctOfInvestment, null);
+  });
+
+  test('the nightly job moves aged open trades up a term, and only those', async () => {
+    const { body: young } = await addBuy({ symbol: 'YNG', entryDate: '2026-11-01' });
+    const { body: month } = await addBuy({ symbol: 'MON', entryDate: '2026-10-01' });
+    const { body: year } = await addBuy({ symbol: 'YR', entryDate: '2025-06-01', term: 'mid' });
+    const { body: setLong } = await addBuy({ symbol: 'LNG', entryDate: '2026-11-10', term: 'long' });
+    const { body: sold } = await addBuy({ symbol: 'OLD', entryDate: '2025-01-02' });
+    await call('POST', `/trades/${sold.id}/exit`, { exitPrice: 60, exitDate: '2026-11-20' });
+
+    const preview = await ageOpenTerms('2026-11-26', { dryRun: true });
+    assert.deepEqual(preview.map((c) => [c.symbol, c.from, c.to]).sort(), [['MON', 'short', 'mid'], ['YR', 'mid', 'long']]);
+    assert.equal((await Trade.findById(month.id).lean()).term, 'short');
+
+    await ageOpenTerms('2026-11-26');
+    const terms = Object.fromEntries((await call('GET', '/trades')).body.map((t) => [t.symbol, t.term]));
+    assert.deepEqual(terms, { YNG: 'short', MON: 'mid', YR: 'long', LNG: 'long', OLD: 'short' });
+    assert.equal(young.term, 'short');
+    assert.equal(setLong.term, 'long');
+    assert.equal(year.term, 'mid');
+
+    assert.deepEqual(await ageOpenTerms('2026-11-26'), []); // running again changes nothing
   });
 
   test('unknown ids get a 404', async () => {

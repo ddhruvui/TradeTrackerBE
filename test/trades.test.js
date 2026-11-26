@@ -1,11 +1,12 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  addMonths,
+  agedTerm,
   calculatedPnlCents,
   exitPnlCents,
   exitProblem,
   filterByTerm,
-  investedFor,
   marginSplit,
   pctOf,
   isISODate,
@@ -206,13 +207,6 @@ describe('exitProblem', () => {
 });
 
 describe('investment', () => {
-  test('All is the three terms added up', () => {
-    const investment = { short: 1000, mid: 2500, long: 6500 };
-    assert.equal(investedFor(investment, 'all'), 10000);
-    assert.equal(investedFor(investment, 'mid'), 2500);
-    assert.equal(investedFor({}, 'all'), 0);
-  });
-
   test('a percentage needs something invested', () => {
     assert.equal(pctOf(250, 10000), 2.5);
     assert.equal(pctOf(-40, 1000), -4);
@@ -224,4 +218,33 @@ test('isISODate only accepts real calendar dates', () => {
   assert.equal(isISODate('2028-02-29'), true);
   assert.equal(isISODate('2026-02-29'), false);
   assert.equal(isISODate('2026-9-1'), false);
+});
+
+describe('aging open trades into longer terms', () => {
+  const today = '2026-11-26';
+  const open = (entryDate, term = 'short') => trade({ entryDate, term });
+
+  test('addMonths keeps the day, or the last day of a shorter month', () => {
+    assert.equal(addMonths('2026-11-26', -1), '2026-10-26');
+    assert.equal(addMonths('2026-03-31', -1), '2026-02-28');
+    assert.equal(addMonths('2028-02-29', -12), '2027-02-28');
+    assert.equal(addMonths('2026-01-15', -1), '2025-12-15');
+  });
+
+  test('short moves to mid once held more than a month', () => {
+    assert.equal(agedTerm(open('2026-10-26'), today), 'short'); // exactly a month
+    assert.equal(agedTerm(open('2026-10-25'), today), 'mid');
+  });
+
+  test('short or mid moves to long once held more than a year', () => {
+    assert.equal(agedTerm(open('2025-11-26'), today), 'mid'); // exactly a year
+    assert.equal(agedTerm(open('2025-11-25'), today), 'long');
+    assert.equal(agedTerm(open('2025-01-02', 'mid'), today), 'long');
+  });
+
+  test('never moves down, and leaves closed trades alone', () => {
+    assert.equal(agedTerm(open('2026-11-20', 'long'), today), 'long');
+    assert.equal(agedTerm(open('2026-09-01', 'long'), today), 'long');
+    assert.equal(agedTerm(trade({ entryDate: '2025-01-02', exitPrice: 120, exitDate: '2026-11-01' }), today), 'short');
+  });
 });

@@ -1,0 +1,66 @@
+name: Age open trade terms
+
+# Every night at 12:05 AM New York time, open trades move up a term as they age:
+# short → mid after a month, → long after a year (scripts/age-terms.js).
+#
+# GitHub's cron runs on UTC and ignores daylight saving, so both UTC times are
+# scheduled and the first step lets through only the one that is 12:05 AM in New York:
+#   04:05 UTC = 12:05 AM EDT (summer, UTC−4)
+#   05:05 UTC = 12:05 AM EST (winter, UTC−5)
+# GitHub can start scheduled runs late, so the check uses which schedule fired, not the
+# clock. Running twice would change nothing anyway: a moved trade is already in its term.
+on:
+  schedule:
+    - cron: '5 4 * * *'
+    - cron: '5 5 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only list what would change
+        type: boolean
+        default: false
+
+concurrency:
+  group: age-terms
+  cancel-in-progress: false
+
+jobs:
+  age-terms:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Is it 12:05 AM in New York?
+        id: gate
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          offset=$(TZ=America/New_York date +%z)  # -0400 in summer, -0500 in winter
+          if [ -z "$SCHEDULE" ] \
+            || { [ "$SCHEDULE" = '5 4 * * *' ] && [ "$offset" = '-0400' ]; } \
+            || { [ "$SCHEDULE" = '5 5 * * *' ] && [ "$offset" = '-0500' ]; }; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "The '$SCHEDULE' schedule isn't 12:05 AM in New York today (UTC$offset); the other one runs."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - if: steps.gate.outputs.run == 'true'
+        run: npm ci --omit=dev
+
+      - name: Move aged open trades up a term
+        if: steps.gate.outputs.run == 'true'
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          MONGO_DB: ${{ secrets.MONGO_DB }}
+          TEST_DB: 'false'
+        run: npm run age-terms -- ${{ inputs.dry_run && '--dry-run' || '' }}

@@ -49,6 +49,22 @@ If the database can't be reached, requests get a 503 with a short message, and t
 
 The API has no login: anyone who knows its URL can read, change and delete trades.
 
+## Nightly term aging (GitHub Actions)
+
+`.github/workflows/age-terms.yml` runs every night at 12:05 AM New York time, summer and winter: it schedules both 04:05 and 05:05 UTC and lets through only the one that is 12:05 AM EDT or EST that day. It runs `npm run age-terms` on the real database (`MONGO_DB`), which moves **open** trades up a term as they age:
+
+- held more than a month (entry date before the same day last month) → short becomes mid
+- held more than a year → short or mid becomes long
+
+Terms never move down, so a term you set by hand stays until age passes it, and closed trades keep theirs. Running it twice changes nothing.
+
+It needs three repository secrets (Settings → Secrets and variables → Actions): `MONGO_URI`, `DB_PASSWORD` and `MONGO_DB`. Run it by hand from the Actions tab (**Run workflow**, with an optional dry run), or locally:
+
+```bash
+npm run age-terms -- --dry-run                # what would change, on the database .env points at
+TEST_DB=true npm run age-terms -- --today=2026-12-01
+```
+
 ## How the numbers work
 
 - **Entries** are a Buy or a Short at a broker, with a term (Short by default, Mid or Long) and a margin in dollars ($0 by default).
@@ -57,7 +73,7 @@ The API has no login: anyone who knows its URL can read, change and delete trade
 - **Margin on partial exits**: every exit pays its share of the margin. Exiting 10 of 20 shares pays half, rounded up to the cent. A typed margin keeps the rest on the open part, so the parts add up to the whole; an auto margin ($0, which the dashboard works out at 6% a year) stays auto and keeps accruing on the shares left. The rule lives in `marginSplit` in `server/lib/trades.js`.
 - **Edited profit or loss**: fractional shares and approximate prices can leave the calculated amount slightly off, so a closed trade's final profit or loss can be typed in (`pnlOverride`). It replaces the calculated amount in the trade's return and in every total, and stays when the trade's other fields change. Clearing it goes back to the calculation; reopening the trade drops it.
 - **Periods**: weeks run Friday to Thursday and reset every Friday; month and year are calendar periods.
-- **Investment**: each term has an amount invested, set from the dashboard and stored in the `settings` collection; All is the sum of the three. Realized profit is also given as a percentage of the investment behind the view: under a term filter that term's amount, under All the total. With nothing invested there's no percentage.
+- **Investment**: one amount invested across every term, set from the dashboard and stored in the `settings` collection. Realized profit is also given as a percentage of it, in every view (a term filter narrows the trades, not the investment). With nothing invested there's no percentage. A document saved with the older per-term amounts reads as their sum until the amount is saved again, which removes them.
 - **Order**: open positions first (newest entry on top), then closed trades by exit date, newest first.
 
 The rules live in `server/lib/trades.js`. The frontend's live exit preview (`src/preview.js` in TradeTrackerFE) mirrors the exit rule, so change both together.
@@ -68,10 +84,10 @@ The rules live in `server/lib/trades.js`. The frontend's live exit preview (`src
 | --- | --- | --- |
 | GET | `/` | Returns the API's name and routes |
 | GET | `/api/info` | Returns `{ testDb, brokers, defaultBroker }` |
-| GET | `/api/trades` | `?term=all\|short\|mid\|long`. Sorted; closed trades include `realizedPnl` (what counts), `calculatedPnl`, `returnPct` (on the trade's cost), `pctOfInvestment` (of the selected term's investment) and `daysHeld`. |
-| GET | `/api/summary` | `?term=…&today=YYYY-MM-DD` (the viewer's date). Returns `week`, `month`, `year` and `overall`, each with `pnl`, `pctOfInvestment`, `margin`, `count` and `from`; `week.to`; `openCount`; `firstDate`; `investment` and `invested` (the amount behind the selected term). |
-| GET | `/api/investment` | Returns `{ short, mid, long, all }`: the amount invested in each term and their sum |
-| PATCH | `/api/investment` | Any of `short, mid, long` ($0 or more; empty means $0) |
+| GET | `/api/trades` | `?term=all\|short\|mid\|long`. Sorted; closed trades include `realizedPnl` (what counts), `calculatedPnl`, `returnPct` (on the trade's cost), `pctOfInvestment` (of the amount invested) and `daysHeld`. |
+| GET | `/api/summary` | `?term=…&today=YYYY-MM-DD` (the viewer's date). Returns `week`, `month`, `year` and `overall`, each with `pnl`, `pctOfInvestment`, `margin`, `count` and `from`; `week.to`; `openCount`; `firstDate`; `invested` (the amount invested, the same for every term). |
+| GET | `/api/investment` | Returns `{ amount }`: the one amount invested |
+| PATCH | `/api/investment` | `{ amount }` ($0 or more; empty means $0) |
 | GET | `/api/prices` | Returns `{ uploadedAt, prices: { TICKER: lastPrice }, live: { TICKER: quoteTime } }`. Prices come from the `LastPrice` database (its `LastPrice` collection, document `latest`), which is uploaded separately; `LAST_PRICE_DB` names another database. VOO and WMT are then fetched live from Yahoo Finance (cached 5 minutes) and replace the uploaded price; `live` lists those tickers and when Yahoo quoted them. If Yahoo fails, the uploaded prices come back alone. |
 | POST | `/api/trades` | `symbol, side (buy/short), term, quantity, entryPrice, entryDate, margin?, broker?` |
 | PATCH | `/api/trades/:id` | Any of the fields above, plus `exitPrice, exitDate` (null both to reopen) and `pnlOverride` (a closed trade's final profit or loss; null goes back to the calculation) |
